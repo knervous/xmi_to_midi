@@ -1,0 +1,12 @@
+{
+  "name": "xmi_to_midi_examples",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Examples for xmi_to_midi in webassembly",
+  "main": "node.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XMI to MIDI Converter</title>
+    <!-- Include the JSZip library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+    <h1>XMI to MIDI Converter</h1>
+
+    <!-- Label and File Input for selecting .xmi files -->
+    <label for="xmi-file">Select XMI file:</label>
+    <input type="file" id="xmi-file" accept=".xmi" />
+
+    <script type="module">
+        import createXmiToMidiModule from './lib/xmi_to_midi.js';
+
+        // Function to handle file selection and WebAssembly call
+        async function handleFileSelect(event) {
+            const fileInput = event.target;
+            const file = fileInput.files[0];
+
+            if (file && file.name.endsWith('.xmi')) {
+                const fileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension from file name
+
+                // Read the file as an array buffer
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer); // Convert to Uint8Array
+
+                // Initialize WebAssembly module
+                const XMI = await createXmiToMidiModule();
+
+                // Step 1: Allocate memory for the file name (C string)
+                const namePtr = XMI._malloc(fileName.length + 1); // Allocate space for file name (+1 for null terminator)
+                XMI.stringToUTF8(fileName, namePtr, fileName.length + 1); // Copy string to WASM heap
+
+                // Step 2: Allocate memory for the array buffer (binary data)
+                const arrayBufferPtr = XMI._malloc(uint8Array.length); // Allocate space for the array buffer
+                XMI.HEAPU8.set(uint8Array, arrayBufferPtr); // Copy the JS buffer into the WASM memory (HEAPU8)
+
+                // Step 3: Call the WebAssembly function
+                XMI._xmi_to_midi(namePtr, arrayBufferPtr, uint8Array.length);
+
+                // Step 4: Gather buffers and create a ZIP file
+                const files = XMI.FS.readdir('./');
+                const zip = new JSZip();
+                
+                for (const file of files) {
+                    if (file.startsWith(fileName)) {
+                        const buffer = XMI.FS.readFile(file); // Get the buffer for the generated file
+                        zip.file(file, buffer); // Add the buffer to the zip file
+                    }
+                }
+
+                // Step 5: Generate the ZIP file and trigger download
+                zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(zipBlob);
+                    link.download = `${fileName}.zip`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link); // Clean up the DOM
+                });
+
+                // Clean up allocated memory
+                XMI._free(namePtr);
+                XMI._free(arrayBufferPtr);
+
+                console.log("XMI to MIDI conversion and ZIP creation complete.");
+            } else {
+                alert("Please select a valid .xmi file.");
+            }
+        }
+
+        // Add event listener to the file input element
+        document.getElementById('xmi-file').addEventListener('change', handleFileSelect);
+    </script>
+</body>
+</html>
